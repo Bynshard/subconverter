@@ -39,6 +39,16 @@ bool isClashConfigContent(const std::string &content)
             regFind(content, "^(port|socks-port|mixed-port|allow-lan|mode|log-level):"));
 }
 
+string_icase_map subscriptionFetchHeaders(const string_icase_map *request_headers)
+{
+    string_icase_map headers;
+    if (request_headers)
+        headers = *request_headers;
+    if (!headers.contains("User-Agent"))
+        headers["User-Agent"] = "Clash.Meta/1.19.10 Mihomo/1.19.10";
+    return headers;
+}
+
 int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_settings &parse_set)
 {
     std::string &proxy = *parse_set.proxy, &subInfo = *parse_set.sub_info;
@@ -46,8 +56,13 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
     string_array &include_remarks = *parse_set.include_remarks;
     RegexMatchConfigs &stream_rules = *parse_set.stream_rules;
     RegexMatchConfigs &time_rules = *parse_set.time_rules;
-    string_icase_map *request_headers = parse_set.request_header;
+    string_icase_map upstream_headers = subscriptionFetchHeaders(parse_set.request_header);
+    string_icase_map *request_headers = &upstream_headers;
     bool &authorized = parse_set.authorized;
+    auto set_error = [&](const std::string &message) {
+        if (parse_set.error)
+            *parse_set.error = message;
+    };
 
     ConfType linkType = ConfType::Unknow;
     std::vector<Proxy> nodes;
@@ -169,9 +184,16 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
             if(parse_set.source_clash_base && parse_set.source_clash_base->empty() && isClashConfigContent(strSub))
                 *parse_set.source_clash_base = strSub;
             writeLog(LOG_TYPE_INFO, "Parsing subscription data...");
-            if(explodeConfContent(strSub, nodes) == 0)
-            {
-                writeLog(LOG_TYPE_ERROR, "Invalid subscription: '" + link + "'!");
+            try {
+                if(explodeConfContent(strSub, nodes) == 0)
+                {
+                    writeLog(LOG_TYPE_ERROR, "Invalid subscription: '" + link + "'!");
+                    set_error("invalid subscription content");
+                    return -1;
+                }
+            } catch(const std::exception &e) {
+                writeLog(LOG_TYPE_ERROR, e.what());
+                set_error(e.what());
                 return -1;
             }
             if(startsWith(strSub, "ssd://"))
@@ -195,19 +217,30 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         else
         {
             writeLog(LOG_TYPE_ERROR, "Cannot download subscription data.");
+            set_error("cannot download subscription data");
             return -1;
         }
         break;
     case ConfType::Local:
         if(!authorized)
+        {
+            set_error("local subscription file is not authorized");
             return -1;
+        }
         writeLog(LOG_TYPE_INFO, "Parsing configuration file data...");
         strSub = fileGet(link);
         if(parse_set.source_clash_base && parse_set.source_clash_base->empty() && isClashConfigContent(strSub))
             *parse_set.source_clash_base = strSub;
-        if(explodeConfContent(strSub, nodes) == 0)
-        {
-            writeLog(LOG_TYPE_ERROR, "Invalid configuration file!");
+        try {
+            if(explodeConfContent(strSub, nodes) == 0)
+            {
+                writeLog(LOG_TYPE_ERROR, "Invalid configuration file!");
+                set_error("invalid configuration file");
+                return -1;
+            }
+        } catch(const std::exception &e) {
+            writeLog(LOG_TYPE_ERROR, e.what());
+            set_error(e.what());
             return -1;
         }
         if(startsWith(strSub, "ssd://"))
@@ -232,6 +265,7 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         if(node.Type == ProxyType::Unknown)
         {
             writeLog(LOG_TYPE_ERROR, "No valid link found.");
+            set_error("no valid node found");
             return -1;
         }
         node.GroupId = groupID;

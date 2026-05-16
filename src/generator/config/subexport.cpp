@@ -259,6 +259,17 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
 
         std::string type = getProxyTypeName(x.Type);
         std::string pluginopts = replaceAllDistinct(x.PluginOption, ";", "&");
+        if (!x.RawProxy.empty()) {
+            singleproxy = YAML::Load(x.RawProxy);
+            if (proxy_block)
+                singleproxy.SetStyle(YAML::EmitterStyle::Block);
+            else
+                singleproxy.SetStyle(YAML::EmitterStyle::Flow);
+            proxies.push_back(singleproxy);
+            remarks_list.emplace_back(x.Remark);
+            nodelist.emplace_back(x);
+            continue;
+        }
         if (ext.append_proxy_type)
             x.Remark = "[" + type + "] " + x.Remark;
 
@@ -576,9 +587,12 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 if (!x.Fingerprint.empty()) {
                     singleproxy["client-fingerprint"] = x.Fingerprint;
                 }
-                singleproxy["idle-session-check-interval"] = x.IdleSessionCheckInterval;
-                singleproxy["idle-session-timeout"] = x.IdleSessionTimeout;
-                singleproxy["min-idle-session"] = x.MinIdleSession;
+                if (x.HasIdleSessionCheckInterval)
+                    singleproxy["idle-session-check-interval"] = x.IdleSessionCheckInterval;
+                if (x.HasIdleSessionTimeout)
+                    singleproxy["idle-session-timeout"] = x.IdleSessionTimeout;
+                if (x.HasMinIdleSession)
+                    singleproxy["min-idle-session"] = x.MinIdleSession;
                 if (!udp.is_undef()) {
                     singleproxy["udp"] = udp.get();
                 }

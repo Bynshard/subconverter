@@ -1,5 +1,7 @@
 #include <string>
 #include <map>
+#include <set>
+#include <stdexcept>
 
 #include "utils/base64/base64.h"
 #include "utils/ini_reader/ini_reader.h"
@@ -1184,6 +1186,44 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
     Node singleproxy;
     uint32_t index = nodes.size();
     const std::string section = yamlnode["proxies"].IsDefined() ? "proxies" : "Proxy";
+    auto validate_fields = [](const Node &proxy, const std::string &proxytype, uint32_t index) {
+        static const std::set<std::string> common = {
+            "name", "type", "server", "port", "udp", "tfo", "skip-cert-verify", "dialer-proxy",
+            "interface-name", "routing-mark", "ip-version", "additional-prefix", "additional-suffix",
+            "sub-name", "icon", "test-url"
+        };
+        static const std::map<std::string, std::set<std::string>> type_fields = {
+            {"ss", {"cipher", "password", "plugin", "plugin-opts", "obfs", "obfs-host"}},
+            {"ssr", {"cipher", "password", "protocol", "obfs", "protocol-param", "protocolparam", "obfs-param", "obfsparam"}},
+            {"socks5", {"username", "password", "tls", "servername", "fingerprint", "client-fingerprint"}},
+            {"http", {"username", "password", "tls", "sni", "headers"}},
+            {"vmess", {"uuid", "alterId", "cipher", "tls", "servername", "network", "ws-opts", "ws-path", "ws-headers", "http-opts", "h2-opts", "grpc-opts", "alpn"}},
+            {"trojan", {"password", "sni", "network", "ws-opts", "grpc-opts", "alpn"}},
+            {"snell", {"psk", "version", "obfs-opts"}},
+            {"wireguard", {"public-key", "private-key", "preshared-key", "ip", "ipv6", "dns", "mtu", "reserved", "remote-dns-resolve", "allowed-ips", "keepalive"}},
+            {"vless", {"uuid", "alterId", "cipher", "tls", "servername", "sni", "network", "ws-opts", "ws-path", "ws-headers", "http-opts", "h2-opts", "grpc-opts", "reality-opts", "flow", "client-fingerprint", "fingerprint", "alpn", "packet-encoding", "encryption", "xudp"}},
+            {"hysteria", {"auth_str", "auth-str", "password", "up", "down", "obfs", "protocol", "sni", "alpn", "ports", "fast-open", "recv-window-conn", "recv-window", "disable-mtu-discovery"}},
+            {"hysteria2", {"password", "auth", "up", "down", "obfs", "obfs-password", "sni", "alpn", "ports", "ca", "ca-str"}},
+            {"tuic", {"password", "uuid", "token", "sni", "alpn", "disable-sni", "reduce-rtt", "request-timeout", "udp-relay-mode", "congestion-controller", "congestion-control", "ip"}},
+            {"anytls", {"password", "client-fingerprint", "fingerprint", "udp", "sni", "alpn", "idle-session-check-interval", "idle-session-timeout", "min-idle-session"}},
+            {"mieru", {"password", "username", "port-range", "multiplexing", "transport"}}
+        };
+        auto fields = type_fields.find(proxytype);
+        if (fields == type_fields.end()) {
+            throw std::runtime_error("unsupported Clash proxy type '" + proxytype + "' at proxies[" +
+                                     std::to_string(index) + "]");
+        }
+        for (auto iter = proxy.begin(); iter != proxy.end(); ++iter) {
+            std::string key = iter->first.as<std::string>();
+            if (common.count(key) || fields->second.count(key))
+                continue;
+            std::string name;
+            proxy["name"] >>= name;
+            throw std::runtime_error("unsupported field '" + key + "' in Clash proxy '" +
+                                     (name.empty() ? std::to_string(index) : name) + "' (type: " +
+                                     proxytype + ")");
+        }
+    };
     for (uint32_t i = 0; i < yamlnode[section].size(); i++) {
         std::string proxytype, ps, server, port, cipher, group, password = "", ports, tempPassword; //common
         std::string type = "none", id, aid = "0", net = "tcp", path, host, edge, tls, sni; //vmess
@@ -1212,6 +1252,8 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
         singleproxy["server"] >>= server;
         singleproxy["port"] >>= port;
         singleproxy["port-range"] >>= ports;
+        validate_fields(singleproxy, proxytype, i);
+        node.RawProxy = YAML::Dump(singleproxy);
 
         if (port.empty() || port == "0")
             if (ports.empty())
@@ -1591,6 +1633,9 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                                 udp,
                                 tribool(), scv, tribool(), underlying_proxy, idle_session_check_interval,
                                 idle_session_timeout, min_idle_session);
+                node.HasIdleSessionCheckInterval = singleproxy["idle-session-check-interval"].IsDefined();
+                node.HasIdleSessionTimeout = singleproxy["idle-session-timeout"].IsDefined();
+                node.HasMinIdleSession = singleproxy["min-idle-session"].IsDefined();
                 break;
             case "mieru"_hash:
                 group = MIERU_DEFAULT_GROUP;
