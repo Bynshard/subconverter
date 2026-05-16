@@ -355,7 +355,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         "classic"), argTLS13 = getUrlArg(
         argument, "tls13");
 
-    std::string base_content, output_content;
+    std::string base_content, output_content, source_clash_base_content;
     ProxyGroupConfigs lCustomProxyGroups = global.customProxyGroups;
     RulesetConfigs lCustomRulesets = global.customRulesets;
     string_array lIncludeRemarks = global.includeRemarks, lExcludeRemarks = global.excludeRemarks;
@@ -565,6 +565,8 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     parse_set.stream_rules = &stream_temp;
     parse_set.time_rules = &time_temp;
     parse_set.sub_info = &subInfo;
+    if (argTarget == "clash" || argTarget == "clashr")
+        parse_set.source_clash_base = &source_clash_base_content;
     parse_set.authorized = authorized;
     parse_set.request_header = &request.headers;
     parse_set.js_runtime = ext.js_runtime;
@@ -705,10 +707,16 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
                 proxyToClash(nodes, yamlnode, dummy_group, argTarget == "clashr", ext);
                 output_content = YAML::Dump(yamlnode);
             } else {
-                if (render_template(fetchFile(lClashBase, proxy, global.cacheConfig), tpl_args, base_content,
-                                    global.templatePath) != 0) {
-                    *status_code = 400;
-                    return base_content;
+                if (!source_clash_base_content.empty() && urls.size() == 1 && argExternalConfig.empty()) {
+                    base_content = source_clash_base_content;
+                    if (regFind(source_clash_base_content, "(^|\n)proxies:"))
+                        ext.clash_new_field_name = true;
+                } else {
+                    if (render_template(fetchFile(lClashBase, proxy, global.cacheConfig), tpl_args, base_content,
+                                        global.templatePath) != 0) {
+                        *status_code = 400;
+                        return base_content;
+                    }
                 }
                 output_content = proxyToClash(nodes, base_content, lRulesetContent, lCustomProxyGroups,
                                               argTarget == "clashr", ext);
