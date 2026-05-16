@@ -61,7 +61,7 @@ RUN git clone --no-checkout https://github.com/ftk/quickjspp.git quickjspp && \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=MinSizeRel && \
     cmake --build build --target quickjs -j "${THREADS}" && \
     install -d /usr/lib/quickjs /usr/include/quickjs && \
-    install -m644 quickjs/libquickjs.a /usr/lib/quickjs/ && \
+    install -m644 build/quickjs/libquickjs.a /usr/lib/quickjs/ && \
     install -m644 quickjs/quickjs.h quickjs/quickjs-libc.h /usr/include/quickjs/ && \
     install -m644 quickjspp.hpp /usr/include/
 
