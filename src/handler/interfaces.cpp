@@ -355,7 +355,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         "classic"), argTLS13 = getUrlArg(
         argument, "tls13");
 
-    std::string base_content, output_content, source_clash_base_content;
+    std::string base_content, output_content, source_clash_base_content, parse_error;
     ProxyGroupConfigs lCustomProxyGroups = global.customProxyGroups;
     RulesetConfigs lCustomRulesets = global.customRulesets;
     string_array lIncludeRemarks = global.includeRemarks, lExcludeRemarks = global.excludeRemarks;
@@ -567,6 +567,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     parse_set.sub_info = &subInfo;
     if (argTarget == "clash" || argTarget == "clashr")
         parse_set.source_clash_base = &source_clash_base_content;
+    parse_set.error = &parse_error;
     parse_set.authorized = authorized;
     parse_set.request_header = &request.headers;
     parse_set.js_runtime = ext.js_runtime;
@@ -579,11 +580,14 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         for (std::string &x: urls) {
             x = regTrim(x);
             writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
+            parse_error.clear();
             if (addNodes(x, insert_nodes, groupID, parse_set) == -1) {
                 if (global.skipFailedLinks)
                     writeLog(0, "The following link doesn't contain any valid node info: " + x, LOG_LEVEL_WARNING);
                 else {
                     *status_code = 400;
+                    if (!parse_error.empty())
+                        return "Subscription parse error: " + parse_error;
                     return "The following link doesn't contain any valid node info: " + x;
                 }
             }
@@ -597,11 +601,14 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         x = regTrim(x);
         //std::cerr<<"Fetching node data from url '"<<x<<"'."<<std::endl;
         writeLog(0, "Fetching node data from url '" + x + "'.", LOG_LEVEL_INFO);
+        parse_error.clear();
         if (addNodes(x, nodes, groupID, parse_set) == -1) {
             if (global.skipFailedLinks)
                 writeLog(0, "The following link doesn't contain any valid node info: " + x, LOG_LEVEL_WARNING);
             else {
                 *status_code = 400;
+                if (!parse_error.empty())
+                    return "Subscription parse error: " + parse_error;
                 return "The following link doesn't contain any valid node info: " + x;
             }
         }

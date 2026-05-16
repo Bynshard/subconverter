@@ -23,6 +23,7 @@ struct parse_settings
     RegexMatchConfigs *time_rules = nullptr;
     std::string *sub_info = nullptr;
     std::string *source_clash_base = nullptr;
+    std::string *error = nullptr;
     bool authorized = false;
     string_icase_map *request_header = nullptr;
 #ifndef NO_JS_RUNTIME
