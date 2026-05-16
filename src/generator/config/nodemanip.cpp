@@ -32,6 +32,13 @@ void copyNodes(std::vector<Proxy> &source, std::vector<Proxy> &dest)
     std::move(source.begin(), source.end(), std::back_inserter(dest));
 }
 
+bool isClashConfigContent(const std::string &content)
+{
+    return regFind(content, "\"?(Proxy|proxies)\"?:") &&
+           (regFind(content, "\"?(proxy-groups|Proxy Group|rules|Rule|dns)\"?:") ||
+            regFind(content, "^(port|socks-port|mixed-port|allow-lan|mode|log-level):"));
+}
+
 int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_settings &parse_set)
 {
     std::string &proxy = *parse_set.proxy, &subInfo = *parse_set.sub_info;
@@ -159,6 +166,8 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         */
         if(!strSub.empty())
         {
+            if(parse_set.source_clash_base && parse_set.source_clash_base->empty() && isClashConfigContent(strSub))
+                *parse_set.source_clash_base = strSub;
             writeLog(LOG_TYPE_INFO, "Parsing subscription data...");
             if(explodeConfContent(strSub, nodes) == 0)
             {
@@ -193,7 +202,10 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
         if(!authorized)
             return -1;
         writeLog(LOG_TYPE_INFO, "Parsing configuration file data...");
-        if(explodeConf(link, nodes) == 0)
+        strSub = fileGet(link);
+        if(parse_set.source_clash_base && parse_set.source_clash_base->empty() && isClashConfigContent(strSub))
+            *parse_set.source_clash_base = strSub;
+        if(explodeConfContent(strSub, nodes) == 0)
         {
             writeLog(LOG_TYPE_ERROR, "Invalid configuration file!");
             return -1;

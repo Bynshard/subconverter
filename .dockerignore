@@ -1,0 +1,16 @@
+.git
+.github
+build
+cmake-build-*
+**/CMakeFiles
+**/CMakeCache.txt
+**/Makefile
+**/*.o
+**/*.a
+**/*.so
+**/*.dylib
+**/*.dll
+**/*.exe
+**/__pycache__
+**/.pytest_cache
+Dockerfile.*

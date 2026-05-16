@@ -1196,6 +1196,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
         std::string auth, up, down, obfsParam, insecure, alpn; //hysteria
         std::string obfsPassword; //hysteria2
         std::string congestion_control, udp_relay_mode, token; // tuic
+        uint16_t idle_session_check_interval = 30, idle_session_timeout = 30, min_idle_session = 0; // anytls
         std::string underlying_proxy;
         string_array dns_server;
         std::vector<String> alpns;
@@ -1580,10 +1581,16 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                         alpns.push_back(alpn2);
                     }
                 }
-                singleproxy["fingerprint"] >>= fingerprint;
+                singleproxy["client-fingerprint"] >>= fingerprint;
+                if (fingerprint.empty())
+                    singleproxy["fingerprint"] >>= fingerprint;
+                singleproxy["idle-session-check-interval"] >> idle_session_check_interval;
+                singleproxy["idle-session-timeout"] >> idle_session_timeout;
+                singleproxy["min-idle-session"] >> min_idle_session;
                 anyTlSConstruct(node, ANYTLS_DEFAULT_GROUP, ps, port, password, server, alpns, fingerprint, sni,
                                 udp,
-                                tribool(), scv, tribool(), underlying_proxy, 30, 30, 0);
+                                tribool(), scv, tribool(), underlying_proxy, idle_session_check_interval,
+                                idle_session_timeout, min_idle_session);
                 break;
             case "mieru"_hash:
                 group = MIERU_DEFAULT_GROUP;

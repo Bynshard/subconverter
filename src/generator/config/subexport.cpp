@@ -137,7 +137,10 @@ bool applyMatcher(const std::string &rule, std::string &real_rule, const Proxy &
         {ProxyType::WireGuard, "WIREGUARD"},
         {ProxyType::VLESS, "VLESS"},
         {ProxyType::Hysteria, "HYSTERIA"},
-        {ProxyType::Hysteria2, "HYSTERIA2"}
+        {ProxyType::Hysteria2, "HYSTERIA2"},
+        {ProxyType::TUIC, "TUIC"},
+        {ProxyType::AnyTLS, "ANYTLS"},
+        {ProxyType::Mieru, "MIERU"}
     };
     if (startsWith(rule, "!!GROUP=")) {
         regGetMatch(rule, group_regex, 3, 0, &target, &ret_real_rule);
@@ -571,8 +574,11 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                     singleproxy["password"] = x.Password;
                 }
                 if (!x.Fingerprint.empty()) {
-                    singleproxy["fingerprint"] = x.Fingerprint;
+                    singleproxy["client-fingerprint"] = x.Fingerprint;
                 }
+                singleproxy["idle-session-check-interval"] = x.IdleSessionCheckInterval;
+                singleproxy["idle-session-timeout"] = x.IdleSessionTimeout;
+                singleproxy["min-idle-session"] = x.MinIdleSession;
                 if (!udp.is_undef()) {
                     singleproxy["udp"] = udp.get();
                 }
