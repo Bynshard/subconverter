@@ -17,6 +17,7 @@ RUN apk add --no-cache \
         mbedtls-dev \
         mbedtls-static \
         pcre2-dev \
+        pcre2-static \
         pkgconf \
         python3 \
         rapidjson-dev \
