@@ -28,16 +28,28 @@ on:
         required: true
         type: choice
         options:
-          - "false"
           - "true"
-        default: "false"
+          - "false"
+        default: "true"
+      upload_release:
+        description: "Upload docker image tar artifacts to GitHub Releases"
+        required: true
+        type: choice
+        options:
+          - "true"
+          - "false"
+        default: "true"
       tag:
         description: "Image tag used when pushing to GHCR"
         required: true
         default: "edge"
+      release_tag:
+        description: "GitHub Release tag used for docker tar artifacts"
+        required: true
+        default: "edge"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -69,6 +81,12 @@ jobs:
         if: ${{ inputs.push_ghcr != 'true' && inputs.upload_tar != 'true' }}
         run: |
           echo "Nothing to do: enable upload_tar, push_ghcr, or both." >&2
+          exit 1
+
+      - name: Validate release options
+        if: ${{ inputs.upload_release == 'true' && inputs.upload_tar != 'true' }}
+        run: |
+          echo "Release uploads require upload_tar=true." >&2
           exit 1
 
       - name: Prepare image name
@@ -139,6 +157,71 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: publish release assets
+    needs: bundle
+    if: ${{ inputs.upload_release == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download combined docker tar artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: subconverter-edge-images
+          path: dist
+
+      - name: Prepare release metadata
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY}-edge"
+          echo "IMAGE=${image,,}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${{ inputs.release_tag }}" >> "$GITHUB_ENV"
+
+      - name: Move release tag to this commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "${RELEASE_TAG}" "${GITHUB_SHA}"
+          git push --force origin "refs/tags/${RELEASE_TAG}"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-notes.md <<EOF
+          Edge Docker images built from ${GITHUB_SHA}.
+
+          Download one of the attached .tar.gz files and load it with:
+
+          \`\`\`sh
+          docker load -i subconverter-edge-linux-amd64.tar.gz
+          \`\`\`
+
+          If GHCR publishing was enabled for this run, pull the multi-arch image with:
+
+          \`\`\`sh
+          docker pull ${IMAGE}:${{ inputs.tag }}
+          \`\`\`
+          EOF
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" \
+              --title "subconverter edge ${RELEASE_TAG}" \
+              --notes-file release-notes.md \
+              --prerelease
+            gh release upload "${RELEASE_TAG}" dist/*.tar.gz --clobber
+          else
+            gh release create "${RELEASE_TAG}" dist/*.tar.gz \
+              --title "subconverter edge ${RELEASE_TAG}" \
+              --notes-file release-notes.md \
+              --prerelease \
+              --target "${GITHUB_SHA}"
+          fi
 
   manifest:
     name: publish multi-arch manifest
