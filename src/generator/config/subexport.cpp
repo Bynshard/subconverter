@@ -261,6 +261,14 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
         std::string pluginopts = replaceAllDistinct(x.PluginOption, ";", "&");
         if (!x.RawProxy.empty()) {
             singleproxy = YAML::Load(x.RawProxy);
+            std::string raw_remark;
+            singleproxy["name"] >>= raw_remark;
+            if (!raw_remark.empty())
+                x.Remark = raw_remark;
+            if (ext.append_proxy_type)
+                x.Remark = "[" + type + "] " + x.Remark;
+            processRemark(x.Remark, remarks_list, false);
+            singleproxy["name"] = x.Remark;
             if (proxy_block)
                 singleproxy.SetStyle(YAML::EmitterStyle::Block);
             else

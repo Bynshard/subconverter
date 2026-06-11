@@ -2,6 +2,7 @@
 #include <string>
 #include <unistd.h>
 #include <csignal>
+#include <limits.h>
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -35,7 +36,7 @@ void SetConsoleTitle(const std::string &title)
 
 void setcd(std::string &file)
 {
-    char szTemp[1024] = {}, filename[256] = {};
+    char szTemp[PATH_MAX] = {}, filename[256] = {};
     std::string path;
 #ifdef _WIN32
     char *pname = NULL;

@@ -46,6 +46,28 @@ std::string parseProxy(const std::string &source) {
     return proxy;
 }
 
+static void mergeSourceClashProxyServerNameserver(std::string &base_content,
+                                                  const std::string &source_clash_base_content) {
+    if (source_clash_base_content.empty())
+        return;
+
+    try {
+        YAML::Node source = YAML::Load(source_clash_base_content);
+        YAML::Node proxy_server_nameserver = source["dns"]["proxy-server-nameserver"];
+        if (!proxy_server_nameserver.IsDefined() || proxy_server_nameserver.IsNull())
+            return;
+
+        YAML::Node base = YAML::Load(base_content);
+        YAML::Node dns;
+        dns["proxy-server-nameserver"] = proxy_server_nameserver;
+        base["dns"] = dns;
+        base_content = YAML::Dump(base);
+    } catch (const std::exception &e) {
+        writeLog(0, std::string("Failed to merge source Clash proxy-server-nameserver: ") + e.what(),
+                 LOG_LEVEL_WARNING);
+    }
+}
+
 extern string_array ClashRuleTypes, SurgeRuleTypes, QuanXRuleTypes;
 
 struct UAProfile {
@@ -725,6 +747,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
                         return base_content;
                     }
                 }
+                mergeSourceClashProxyServerNameserver(base_content, source_clash_base_content);
                 output_content = proxyToClash(nodes, base_content, lRulesetContent, lCustomProxyGroups,
                                               argTarget == "clashr", ext);
             }
