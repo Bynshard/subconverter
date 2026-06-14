@@ -185,6 +185,14 @@ jobs:
           echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=${{ github.event.inputs.release_tag || 'edge' }}" >> "$GITHUB_ENV"
 
+      - name: Delete previous rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
+          fi
+
       - name: Move release tag to this commit
         run: |
           git config user.name "github-actions[bot]"
@@ -192,7 +200,7 @@ jobs:
           git tag -f "${RELEASE_TAG}" "${GITHUB_SHA}"
           git push --force origin "refs/tags/${RELEASE_TAG}"
 
-      - name: Create or update GitHub Release
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -212,19 +220,11 @@ jobs:
           \`\`\`
           EOF
 
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release edit "${RELEASE_TAG}" \
-              --title "subconverter edge ${RELEASE_TAG}" \
-              --notes-file release-notes.md \
-              --prerelease
-            gh release upload "${RELEASE_TAG}" dist/*.tar.gz --clobber
-          else
-            gh release create "${RELEASE_TAG}" dist/*.tar.gz \
-              --title "subconverter edge ${RELEASE_TAG}" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --target "${GITHUB_SHA}"
-          fi
+          gh release create "${RELEASE_TAG}" dist/*.tar.gz \
+            --title "subconverter edge ${RELEASE_TAG}" \
+            --notes-file release-notes.md \
+            --prerelease \
+            --target "${GITHUB_SHA}"
 
   manifest:
     name: publish multi-arch manifest
