@@ -1205,23 +1205,33 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
             {"hysteria", {"auth_str", "auth-str", "password", "up", "down", "obfs", "protocol", "sni", "alpn", "ports", "fast-open", "recv-window-conn", "recv-window", "disable-mtu-discovery"}},
             {"hysteria2", {"password", "auth", "up", "down", "obfs", "obfs-password", "sni", "alpn", "ports", "ca", "ca-str"}},
             {"tuic", {"password", "uuid", "token", "sni", "alpn", "disable-sni", "reduce-rtt", "request-timeout", "udp-relay-mode", "congestion-controller", "congestion-control", "ip"}},
-            {"anytls", {"password", "client-fingerprint", "fingerprint", "udp", "sni", "alpn", "idle-session-check-interval", "idle-session-timeout", "min-idle-session"}},
+            {"anytls", {"password", "client-fingerprint", "fingerprint", "udp", "sni", "alpn", "idle-session-check-interval", "idle-session-timeout", "min-idle-session", "client-metadata"}},
             {"mieru", {"password", "username", "port-range", "multiplexing", "transport"}}
         };
+        std::string name;
+        proxy["name"] >>= name;
+        const std::string label = name.empty() ? std::to_string(index) : name;
         auto fields = type_fields.find(proxytype);
         if (fields == type_fields.end()) {
-            throw std::runtime_error("unsupported Clash proxy type '" + proxytype + "' at proxies[" +
-                                     std::to_string(index) + "]");
+            // Unknown proxy type: warn and let the caller skip this node instead of
+            // aborting the whole subscription with an exception.
+            writeLog(LOG_TYPE_WARN,
+                     "unsupported Clash proxy type '" + proxytype + "' at proxies[" + std::to_string(index) +
+                             "], skipped",
+                     LOG_LEVEL_WARNING);
+            return;
         }
         for (auto iter = proxy.begin(); iter != proxy.end(); ++iter) {
             std::string key = iter->first.as<std::string>();
             if (common.count(key) || fields->second.count(key))
                 continue;
-            std::string name;
-            proxy["name"] >>= name;
-            throw std::runtime_error("unsupported field '" + key + "' in Clash proxy '" +
-                                     (name.empty() ? std::to_string(index) : name) + "' (type: " +
-                                     proxytype + ")");
+            // Unknown field: warn and keep going. The raw proxy is preserved via
+            // node.RawProxy, so the field is not lost. Throwing here used to make the
+            // entire subscription resolve to "No nodes were found".
+            writeLog(LOG_TYPE_WARN,
+                     "ignoring unknown field '" + key + "' in Clash proxy '" + label + "' (type: " + proxytype +
+                             ")",
+                     LOG_LEVEL_WARNING);
         }
     };
     for (uint32_t i = 0; i < yamlnode[section].size(); i++) {
