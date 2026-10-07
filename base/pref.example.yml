@@ -23,6 +23,8 @@ common:
   proxy_config: SYSTEM
   proxy_ruleset: SYSTEM
   proxy_subscription: NONE
+  # Disable when an upstream server rejects converter identity headers.
+  send_request_headers: true
   append_proxy_type: false
   reload_conf_on_request: false
 

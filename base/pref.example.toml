@@ -76,6 +76,10 @@ proxy_config = "SYSTEM"
 proxy_ruleset = "SYSTEM"
 proxy_subscription = "NONE"
 
+# Send SubConverter-Request and SubConverter-Version headers to upstream servers.
+# Set to false when a subscription server rejects converter identity headers.
+send_request_headers = true
+
 # Append a proxy type string ([SS] [SSR] [VMess]) to node remark.
 append_proxy_type = false
 

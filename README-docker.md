@@ -22,6 +22,23 @@ For ARM edge devices, build with Docker Buildx, for example:
 docker buildx build --platform linux/arm64 -t subconverter-edge:arm64 --load .
 ```
 
+## Subscription servers rejecting converter headers
+
+Some subscription servers return HTTP 403 when requests contain
+`SubConverter-Request` or `SubConverter-Version`. With a binary built from this
+source, disable those two headers in the active preferences file:
+
+```toml
+[common]
+send_request_headers = false
+```
+
+For INI use `send_request_headers=false` in `[common]`; for YAML use
+`send_request_headers: false` under `common`. The default is `true`. This setting
+affects outgoing HTTP requests, preserves the existing User-Agent handling,
+and does not change conversion rules or additional nodes. Restart subconverter
+after changing the setting. Existing images must be rebuilt to support it.
+
 ## Build with GitHub Actions
 
 For infrequent edge deployments, use the manual workflow `.github/workflows/edge-docker.yml`.

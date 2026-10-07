@@ -337,6 +337,7 @@ void readYAMLConf(YAML::Node &node)
     section["proxy_config"] >> global.proxyConfig;
     section["proxy_ruleset"] >> global.proxyRuleset;
     section["proxy_subscription"] >> global.proxySubscription;
+    section["send_request_headers"] >> global.sendRequestHeaders;
     section["reload_conf_on_request"] >> global.reloadConfOnRequest;
 
     if(node["userinfo"].IsDefined())
@@ -612,6 +613,7 @@ void readTOMLConf(toml::value &root)
                   "proxy_config", global.proxyConfig,
                   "proxy_ruleset", global.proxyRuleset,
                   "proxy_subscription", global.proxySubscription,
+                  "send_request_headers", global.sendRequestHeaders,
                   "append_proxy_type", global.appendType,
                   "reload_conf_on_request", global.reloadConfOnRequest
     );
@@ -855,6 +857,7 @@ void readConf()
     ini.get_if_exist("proxy_config", global.proxyConfig);
     ini.get_if_exist("proxy_ruleset", global.proxyRuleset);
     ini.get_if_exist("proxy_subscription", global.proxySubscription);
+    ini.get_bool_if_exist("send_request_headers", global.sendRequestHeaders);
     ini.get_bool_if_exist("reload_conf_on_request", global.reloadConfOnRequest);
 
     if(ini.section_exist("surge_external_proxy"))

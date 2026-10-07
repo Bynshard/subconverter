@@ -44,6 +44,7 @@ struct Settings
 
     //preferences
     bool reloadConfOnRequest = false;
+    bool sendRequestHeaders = true;
     RegexMatchConfigs renames, emojis;
     bool addEmoji = false, removeEmoji = false, appendType = false, filterDeprecated = true;
     tribool UDPFlag, TFOFlag, skipCertVerify, TLS13Flag, enableInsert;
