@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <mutex>
@@ -46,25 +47,114 @@ std::string parseProxy(const std::string &source) {
     return proxy;
 }
 
-static void mergeSourceClashProxyServerNameserver(std::string &base_content,
-                                                  const std::string &source_clash_base_content) {
+/// Top-level keys the converter always regenerates. They must never be copied from the
+/// source subscription, otherwise the configured template / ruleset groups are lost.
+static const string_array &sourceClashRegeneratedKeys() {
+    static const string_array keys = {"proxies", "proxy-groups", "rules"};
+    return keys;
+}
+
+/// Top-level keys that are always taken from the source subscription when it provides them,
+/// even when the requested template already defines the same key.
+///
+/// Airports increasingly move node server hostnames behind generated subdomains
+/// (e.g. <uuid>.example.com) and publish the real hostnames in the Clash `hosts` section.
+/// Dropping that mapping leaves every node with an unresolvable server address.
+static const string_array &sourceClashAlwaysPreservedKeys() {
+    static const string_array keys = {"hosts"};
+    return keys;
+}
+
+/// Top-level keys owned by the generated config / the deployment. They are never copied from
+/// the source subscription during a merge, not even by `preserve_all`, because redefining a
+/// listener or the control plane would either clash with the template (`mixed-port` next to
+/// `port`) or override what the router's UI manages. An explicit `preserve=<key>` still wins.
+static const string_array &sourceClashDeploymentOwnedKeys() {
+    static const string_array keys = {
+        "port", "socks-port", "mixed-port", "redir-port", "tproxy-port", "allow-lan",
+        "bind-address", "mode", "log-level", "ipv6", "external-controller",
+        "external-controller-pipe", "external-controller-cors", "external-controller-tls",
+        "secret", "authentication", "external-ui", "external-ui-name", "external-ui-url",
+        "external-ui-base-dir", "tproxy"};
+    return keys;
+}
+
+/// Merge the top-level sections of the source Clash subscription into the generated config.
+///
+/// A subscription that is already a Clash config carries its own customisation: `hosts`,
+/// `dns`, `tun`, `sniffer`, `rule-providers` and friends. Conversion used to keep only the
+/// nodes/groups/rules and silently discard everything else, so a caller that supplies a
+/// template (`config=`) lost all of it. This restores that content:
+///   * `proxies` / `proxy-groups` / `rules` are never copied (they are regenerated)
+///   * deployment-owned keys are skipped unless explicitly requested via `force_preserve_keys`
+///   * `force_preserve_keys` are always copied and win over the template
+///   * `preserve_all` / `preserve_defined` copy every remaining source key, winning over base
+///   * otherwise a key is copied only when the generated base does not define it
+/// The `dns` section is deep merged so the airport's `use-hosts`, `fake-ip-filter` and
+/// `proxy-server-nameserver` survive next to template DNS entries.
+static void mergeSourceClashSections(std::string &base_content, const std::string &source_clash_base_content,
+                                     const string_array &force_preserve_keys, bool preserve_all,
+                                     bool preserve_defined) {
     if (source_clash_base_content.empty())
         return;
 
     try {
         YAML::Node source = YAML::Load(source_clash_base_content);
-        YAML::Node proxy_server_nameserver = source["dns"]["proxy-server-nameserver"];
-        if (!proxy_server_nameserver.IsDefined() || proxy_server_nameserver.IsNull())
+        if (!source.IsMap() || source.size() == 0)
             return;
 
         YAML::Node base = YAML::Load(base_content);
-        YAML::Node dns;
-        dns["proxy-server-nameserver"] = proxy_server_nameserver;
-        base["dns"] = dns;
-        base_content = YAML::Dump(base);
+        if (!base.IsMap())
+            return;
+
+        const string_array &regenerated = sourceClashRegeneratedKeys();
+        const string_array &deployment_owned = sourceClashDeploymentOwnedKeys();
+        bool changed = false;
+
+        for (auto it = source.begin(); it != source.end(); ++it) {
+            std::string key = it->first.as<std::string>();
+            if (std::find(regenerated.cbegin(), regenerated.cend(), key) != regenerated.cend())
+                continue;
+
+            bool forced = std::find(force_preserve_keys.cbegin(), force_preserve_keys.cend(), key) !=
+                          force_preserve_keys.cend();
+            if (!forced && std::find(deployment_owned.cbegin(), deployment_owned.cend(), key) !=
+                deployment_owned.cend())
+                continue;
+
+            bool overwrite = forced || preserve_all || preserve_defined;
+            bool defined = base[key].IsDefined() && !base[key].IsNull();
+
+            if (key == "dns" && it->second.IsMap()) {
+                if (!defined || !base[key].IsMap()) {
+                    if (overwrite || !defined) {
+                        base[key] = it->second;
+                        changed = true;
+                    }
+                    continue;
+                }
+                YAML::Node base_dns = base[key];
+                for (auto sub = it->second.begin(); sub != it->second.end(); ++sub) {
+                    std::string sub_key = sub->first.as<std::string>();
+                    if (overwrite || !base_dns[sub_key].IsDefined() || base_dns[sub_key].IsNull()) {
+                        base_dns[sub_key] = sub->second;
+                        changed = true;
+                    }
+                }
+                continue;
+            }
+
+            if (defined && !overwrite)
+                continue;
+
+            base[key] = it->second;
+            changed = true;
+        }
+
+        if (changed)
+            base_content = YAML::Dump(base);
     } catch (const std::exception &e) {
-        writeLog(0, std::string("Failed to merge source Clash proxy-server-nameserver: ") + e.what(),
-                 LOG_LEVEL_WARNING);
+        writeLog(0, std::string("Failed to merge source Clash sections: ") + e.what(), LOG_LEVEL_WARNING);
     }
 }
 
@@ -376,6 +466,20 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
     tribool argPrependInsert = getUrlArg(argument, "prepend"), argGenClassicalRuleProvider = getUrlArg(argument,
         "classic"), argTLS13 = getUrlArg(
         argument, "tls13");
+
+    /// keep the source subscription's own Clash sections (hosts, dns, tun, ...)
+    tribool argPreserveSource = getUrlArg(argument, "preserve_source"), argPreserveAll = getUrlArg(argument,
+        "preserve_all"), argPreserveDefined = getUrlArg(argument, "preserve_defined");
+    string_array argPreserveKeys;
+    {
+        std::string raw_preserve = getUrlArg(argument, "preserve");
+        if (!raw_preserve.empty())
+            for (std::string &key: split(raw_preserve, ",")) {
+                key = trimWhitespace(key);
+                if (!key.empty())
+                    argPreserveKeys.emplace_back(key);
+            }
+    }
 
     std::string base_content, output_content, source_clash_base_content, parse_error;
     ProxyGroupConfigs lCustomProxyGroups = global.customProxyGroups;
@@ -736,8 +840,10 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
                 proxyToClash(nodes, yamlnode, dummy_group, argTarget == "clashr", ext);
                 output_content = formatterShortId(YAML::Dump(yamlnode));
             } else {
+                bool base_from_source = false;
                 if (!source_clash_base_content.empty() && urls.size() == 1 && argExternalConfig.empty()) {
                     base_content = source_clash_base_content;
+                    base_from_source = true;
                     if (regFind(source_clash_base_content, "(^|\n)proxies:"))
                         ext.clash_new_field_name = true;
                 } else {
@@ -747,7 +853,14 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
                         return base_content;
                     }
                 }
-                mergeSourceClashProxyServerNameserver(base_content, source_clash_base_content);
+                if (!base_from_source && argPreserveSource.get(true) && !source_clash_base_content.empty()) {
+                    string_array preserve_keys = sourceClashAlwaysPreservedKeys();
+                    for (const std::string &key: argPreserveKeys)
+                        if (std::find(preserve_keys.cbegin(), preserve_keys.cend(), key) == preserve_keys.cend())
+                            preserve_keys.emplace_back(key);
+                    mergeSourceClashSections(base_content, source_clash_base_content, preserve_keys,
+                                             argPreserveAll.get(false), argPreserveDefined.get(false));
+                }
                 output_content = proxyToClash(nodes, base_content, lRulesetContent, lCustomProxyGroups,
                                               argTarget == "clashr", ext);
             }
