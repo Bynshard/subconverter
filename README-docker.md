@@ -128,6 +128,22 @@ docker run -d --restart=always -p 25500:25500 asdlokj1qpi23/subconverter:latest
 curl http://localhost:25500/version
 # if you see `subconverter vx.x.x backend` then the container is up and running
 ```
+
+VLESS post-quantum conversion can be checked with:
+
+```bash
+python3 scripts/vless-pq-regression.py --endpoint http://127.0.0.1:25500
+```
+
+The check uses synthetic credentials and tests URI → Mihomo and VLESS/mixed URI
+round trips. It requires Python 3 and PyYAML. Without `--endpoint`, it starts
+`build/subconverter` locally and also checks YAML → URI → YAML.
+
+VLESS links retain `encryption` and `pqv` on URI export. Mihomo output retains
+the inner VLESS encryption and enables `support-x25519mlkem768` for
+`mlkem768x25519plus` links, unless the source explicitly sets that TLS option.
+The `pqv` parameter is not emitted as a Mihomo authentication option; preserving
+it in a link does not mean that Mihomo verifies REALITY's ML-DSA signature.
 Or run in docker-compose:
 ```yaml
 ---

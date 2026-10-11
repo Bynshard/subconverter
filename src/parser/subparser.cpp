@@ -1543,6 +1543,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes) {
                 vlessConstruct(node, XRAY_DEFAULT_GROUP, ps, server, port, type, id, aid, net, "auto", flow, mode,
                                path, host, "", tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption, udp,
                                tribool(), tribool(), tribool(), underlying_proxy, v2ray_http_upgrade);
+                node.RealityMLKEM = safe_as<std::string>(singleproxy["reality-opts"]["support-x25519mlkem768"]);
                 break;
             case "hysteria"_hash:
                 group = HYSTERIA_DEFAULT_GROUP;
@@ -1876,7 +1877,7 @@ void explodeStdVless(std::string vless, Proxy &node) {
     flow = getUrlArg(addition, "flow");
     pbk = getUrlArg(addition, "pbk");
     sid = getUrlArg(addition, "sid");
-    encryption = getUrlArg(addition, "encryption");
+    encryption = urlDecode(getUrlArg(addition, "encryption"));
     fp = getUrlArg(addition, "fp");
     std::string packet_encoding = getUrlArg(addition, "packet-encoding");
     std::string alpn = getUrlArg(addition, "alpn");
@@ -1917,6 +1918,8 @@ void explodeStdVless(std::string vless, Proxy &node) {
     sni = getUrlArg(addition, "sni");
     vlessConstruct(node, XRAY_DEFAULT_GROUP, remarks, add, port, type, id, aid, net, "auto", flow, mode, path, host, "",
                    tls, pbk, sid, fp, sni, alpnList, packet_encoding, encryption);
+    node.RealityPQVerify = urlDecode(getUrlArg(addition, "pqv"));
+    node.RealityMLKEM = getUrlArg(addition, "support-x25519mlkem768");
     return;
 }
 

@@ -106,6 +106,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build regression image
+        if: ${{ contains(github.event.inputs.platforms || 'linux/amd64,linux/arm64', matrix.platform) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: subconverter-regression:local
+          build-args: |
+            INCLUDE_RULES=${{ (github.event.inputs.include_rules || 'false') == 'true' && '1' || '0' }}
+
+      - name: Check VLESS post-quantum round trips
+        if: ${{ contains(github.event.inputs.platforms || 'linux/amd64,linux/arm64', matrix.platform) }}
+        run: |
+          fixture="$(mktemp -d)"
+          printf '[common]\napi_mode=false\nenable_insert=false\n[ruleset]\nenabled=false\n[server]\nlisten=0.0.0.0\nport=25500\n' > "$fixture/pref.ini"
+          docker run -d --name subconverter-regression \
+            -p 127.0.0.1:25519:25500 -v "$fixture:$fixture" -w "$fixture" \
+            subconverter-regression:local subconverter -f "$fixture/pref.ini"
+          trap 'docker rm -f subconverter-regression >/dev/null 2>&1 || true' EXIT
+          python3 -m venv "$RUNNER_TEMP/pq-regression-venv"
+          "$RUNNER_TEMP/pq-regression-venv/bin/pip" install 'PyYAML==6.0.2'
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:25519/version; then break; fi
+            sleep 1
+          done
+          "$RUNNER_TEMP/pq-regression-venv/bin/python" scripts/vless-pq-regression.py \
+            --endpoint http://127.0.0.1:25519 --fixture-dir "$fixture"
+
       - name: Build and push platform image
         if: ${{ (github.event.inputs.push_ghcr || 'true') == 'true' && contains(github.event.inputs.platforms || 'linux/amd64,linux/arm64', matrix.platform) }}
         uses: docker/build-push-action@v6

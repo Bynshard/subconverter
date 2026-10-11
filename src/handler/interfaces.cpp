@@ -421,6 +421,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
         case "v2ray"_hash:
         case "trojan"_hash:
         case "mixed"_hash:
+        case "vless"_hash:
             lSimpleSubscription = true;
             break;
         case "clash"_hash:
@@ -965,7 +966,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS) {
             break;
         case "vless"_hash:
             writeLog(0, "Generate target: vless", LOG_LEVEL_INFO);
-            output_content = proxyToSingle(nodes, 16, ext);
+            output_content = proxyToSingle(nodes, 32, ext);
             if (argUpload)
                 uploadGist("vless", argUploadPath, output_content, false);
             break;

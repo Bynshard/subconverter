@@ -658,6 +658,10 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                     singleproxy["skip-cert-verify"] = scv.get();
                 if (!x.PublicKey.empty()) {
                     singleproxy["reality-opts"]["public-key"] = x.PublicKey;
+                    if (!x.RealityMLKEM.is_undef())
+                        singleproxy["reality-opts"]["support-x25519mlkem768"] = x.RealityMLKEM.get();
+                    else if (x.Encryption.starts_with("mlkem768x25519plus."))
+                        singleproxy["reality-opts"]["support-x25519mlkem768"] = true;
                 }
                 if (!x.ServerName.empty())
                     singleproxy["servername"] = x.ServerName;
@@ -834,31 +838,10 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
 
 
 std::string formatterShortId(std::string input) {
-    std::string target = "short-id:";
-    size_t startPos = input.find(target);
-
-    while (startPos != std::string::npos) {
-        // 查找对应实例的结束位置
-        size_t endPos = input.find("}", startPos);
-
-        if (endPos != std::string::npos) {
-            // 提取原始id
-            std::string originalId = input.substr(startPos + target.length(), endPos - startPos - target.length());
-
-            // 去除原始id中的空格
-            originalId.erase(remove_if(originalId.begin(), originalId.end(), ::isspace), originalId.end());
-
-            // 添加引号
-            std::string modifiedId = " \"" + originalId + "\" ";
-
-            // 替换原始id为修改后的id
-            input.replace(startPos + target.length(), endPos - startPos - target.length(), modifiedId);
-        }
-
-        // 继续查找下一个实例
-        startPos = input.find(target, startPos + 1);
-    }
-    return input;
+    // Quote only the hex scalar, never the following fields in a flow mapping.
+    return regReplace(input,
+                      R"shortid(short-id:[ \t]*(?:"([0-9a-fA-F]*)"|'([0-9a-fA-F]*)'|([0-9a-fA-F]*))(?=[ \t]*[,}\r\n]))shortid",
+                      R"(short-id: "$1$2$3")");
 }
 
 std::string proxyToClash(std::vector<Proxy> &nodes, const std::string &base_conf,
@@ -1362,6 +1345,11 @@ std::string proxyToSingle(std::vector<Proxy> &nodes, int types, extra_settings &
                 proxyStr = "vless://" + (id.empty()
                                ? "00000000-0000-0000-0000-000000000000"
                                : id) + "@" + hostname + ":" + port+"?";
+                proxyStr += "encryption=" + urlEncode(x.Encryption.empty() ? "none" : x.Encryption);
+                if (!x.RealityPQVerify.empty())
+                    proxyStr += "&pqv=" + urlEncode(x.RealityPQVerify);
+                if (!x.RealityMLKEM.is_undef())
+                    proxyStr += std::string("&support-x25519mlkem768=") + (x.RealityMLKEM.get() ? "true" : "false");
                 if (!tls.empty()) {
                     if (!pbk.empty()) {
                         proxyStr += "&security=reality";
