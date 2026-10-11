@@ -10,3 +10,8 @@ src/.DS_Store
 
 build
 tmp
+
+# private home-network material: topology, subscription urls and tokens.
+# Never commit these; the repository is public.
+local
+docs
